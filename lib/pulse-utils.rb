@@ -3,33 +3,58 @@ module PulseUtils
     class ListSinkInputs
       FIRST_LINE_REGEX = /\A(\d+) sink/
       START_OF_SINK_INPUT = /\Aindex: (\d+)/
-      ATTR_REGEX = /\A(\w+): (.*)\z/
+      ATTR_REGEX = /\A([\w\s]+):(\s(.*))?\z/
 
       def initialize(raw_data)
         @raw_data = raw_data
       end
 
+      def debug(msg)
+        puts "[\033[0;34mDEBUG\033[0;0m] - #{msg}"
+      end
+
       def parse
         {sink_inputs: {}}.tap do |result|
-          current_index = nil
-          state = :looking_for_first_line
+          current_index    = nil
+          current_attr_key = nil
+          state            = :looking_for_first_line
 
           first_line_found = ->(match_data) {
             result[:number_available] = match_data.captures[0].to_i
             state = :looking_for_sink_input
+
+            debug("\033[0;33mfirst_line_found\033[0;0m: \033[0;32mnumber_available\033[0;0m=#{result[:number_available]}, \033[0;32mstate\033[0;0m=#{state}")
           }
 
           new_sink_input_found = ->(match_data) {
             state = :reading_sink_input_attrs
             current_index = match_data.captures[0].to_i
             result[:sink_inputs][current_index] = {}
-          }
 
-          write_to_current = ->(key, value) {
-            result[:sink_inputs][current_index][key] = value
+            debug("\033[0;33mnew_sink_input_found\033[0;0m: \033[0;32mcurrent_index\033[0;0m=#{current_index} \033[0;32mstate\033[0;0m=#{state}")
           }
 
           attr_found = ->(match_data) {
+            key = match_data.captures[0]
+            value = match_data.captures[2]
+
+            current_attr_key = key
+
+            if key == 'properties'
+              result[:sink_inputs][current_index][current_attr_key] = {}
+              state = :reading_sink_input_properties
+            else
+              result[:sink_inputs][current_index][current_attr_key] = value
+            end
+
+            debug("\033[0;33mattr_found\033[0;0m: \033[0;32mcurrent_attr_key\033[0;0m=#{current_attr_key} \033[0;32mvalue\033[0;0m=#{value}")
+          }
+
+          value_continuation_found = ->(value) {
+            result[:sink_inputs][current_index][current_attr_key].concat(" #{value}")
+          }
+
+          property_found = ->(match_data) {
           }
 
           @raw_data.lines.each do |l|
@@ -49,10 +74,11 @@ module PulseUtils
                 attr_found.call(match_data)
               elsif (match_data = START_OF_SINK_INPUT.match(line))
                 new_sink_input_found.call(match_data)
+              else
+                value_continuation_found.call(line)
               end
+            when :reading_sink_input_properties
             end
-
-            puts line
           end
         end
       end
