@@ -4,6 +4,7 @@ module PulseUtils
       FIRST_LINE_REGEX = /\A(\d+) sink/
       START_OF_SINK_INPUT = /\Aindex: (\d+)/
       ATTR_REGEX = /\A([\w\s]+):(\s(.*))?\z/
+      PROP_REGEX = /\A([\w\.\-]+)\s=\s"(.*)"\z/
 
       def initialize(raw_data)
         @raw_data = raw_data
@@ -35,12 +36,12 @@ module PulseUtils
           }
 
           attr_found = ->(match_data) {
-            key = match_data.captures[0]
+            key = match_data.captures[0].to_sym
             value = match_data.captures[2]
 
             current_attr_key = key
 
-            if key == 'properties'
+            if key == :properties
               result[:sink_inputs][current_index][current_attr_key] = {}
               state = :reading_sink_input_properties
             else
@@ -55,6 +56,22 @@ module PulseUtils
           }
 
           property_found = ->(match_data) {
+            split_prop_name = match_data.captures[0].split('.').map(&:to_sym)
+            value = match_data.captures[1]
+
+            index = 0
+
+            result[:sink_inputs][current_index][current_attr_key] ||= {}
+            split_prop_name.reduce(result[:sink_inputs][current_index][current_attr_key]) do |h, k|
+              index += 1
+              if index == split_prop_name.size
+                h[k] = value
+              else
+                h[k] ||= {}
+              end
+            end
+
+            debug("\033[0;33mproperty_found\033[0;0m: \033[0;32msplit_prop_name\033[0;0m=#{split_prop_name.to_s} \033[0;32mvalue\033[0;0m=#{value}")
           }
 
           @raw_data.lines.each do |l|
@@ -78,6 +95,9 @@ module PulseUtils
                 value_continuation_found.call(line)
               end
             when :reading_sink_input_properties
+              if (match_data = PROP_REGEX.match(line))
+                property_found.call(match_data)
+              end
             end
           end
         end
