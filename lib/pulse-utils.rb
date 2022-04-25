@@ -11,6 +11,7 @@ module PulseUtils
       end
 
       def debug(msg)
+        return
         puts "[\033[0;34mDEBUG\033[0;0m] - #{msg}"
       end
 

@@ -71,8 +71,6 @@ module PulseUtils
 		module-stream-restore.id = "sink-input-by-application-name:Firefox"
 EOF
         ).parse.tap do |result|
-          puts "\033[0;36m#{result.to_s}\033[0;0m"
-
           assert_equal(2, result[:number_available])
 
           assert(result[:sink_inputs].key?(3))
